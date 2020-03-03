@@ -45,7 +45,7 @@ public class FileService {
      * @throws IOException catch it in getFiles
      */
     private List<Path> readFiles(Path path) throws IOException {
-        validate(path == null, "directory.is.Empty");
+        validate(path == null, "path.error");
         try (Stream<Path> streamPaths = Files.list(path)) {
             return streamPaths.collect(Collectors.toList());
         }
@@ -62,7 +62,6 @@ public class FileService {
         Path path = Paths.get(pathToDirectory);
         validate(!Files.exists(path), "file.not.found");
         try {
-            validate(!isEmptyDirectory(path), "directory.is.empty");
             for (Path tempPath : readFiles(path)) {
                 FileTransferModel fileTransferModel = new FileTransferModel();
                 fileTransferModel.setName(tempPath.getFileName().toString());
