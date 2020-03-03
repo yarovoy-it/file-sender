@@ -20,4 +20,9 @@ public class FileSenderApplication {
         return new DozerBeanMapper();
     }
 
+    @Bean
+    public RestTemplate getRestTemplate() {
+        return new RestTemplate();
+    }
+
 }

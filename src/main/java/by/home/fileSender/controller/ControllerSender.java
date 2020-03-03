@@ -9,11 +9,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
+ *
  * Controller Sender. Include one get methods which return list of FileTransferDto
  */
 @RestController
@@ -22,13 +24,23 @@ public class ControllerSender {
 
     private final FileService fileService;
 
+    private final RestTemplate restTemplate;
+
     private final Mapper mapper;
 
-    public ControllerSender(FileService fileService, Mapper mapper) {
+    public ControllerSender(FileService fileService, RestTemplate restTemplate, Mapper mapper) {
         this.fileService = fileService;
+        this.restTemplate = restTemplate;
         this.mapper = mapper;
     }
 
+    public static void readyForTaking() {
+        final String uri = "http://localhost:8084/";
+        RestTemplate restTemplate = new RestTemplate();
+        String result = restTemplate.getForObject(uri, String.class);
+        System.out.println(result);
+
+    }
 
     /**
      * Mapping from FileTransferModel to FileTransferDto wrapped it to ResponseEntity then send to client
@@ -45,6 +57,5 @@ public class ControllerSender {
         return new ResponseEntity<>(fileDtoList, HttpStatus.OK);
     }
 
-
-
+//https://howtodoinjava.com/spring-boot2/developer-tools-module-tutorial/
 }

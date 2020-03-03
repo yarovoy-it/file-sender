@@ -8,15 +8,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static by.home.fileSender.component.Util.validate;
+import static by.home.fileSender.controller.ControllerSender.readyForTaking;
 
 @Service
 public class FileService {
@@ -58,7 +57,6 @@ public class FileService {
      */
     public List<FileTransferModel> getFiles() {
         List<FileTransferModel> fileTransferModels = new ArrayList<>();
-        validate(pathToDirectory == null, "not.correct.path");
         Path path = Paths.get(pathToDirectory);
         validate(!Files.exists(path), "file.not.found");
         try {
@@ -74,5 +72,29 @@ public class FileService {
             LOGGER.error(e.getMessage());
         }
         return null;
+    }
+
+    public void observeFolder() {
+        try {
+            WatchService watchService = FileSystems.getDefault().newWatchService();
+            validate(pathToDirectory == null, "not.correct.path");
+            Path path = Paths.get(pathToDirectory);
+            path.register(
+                    watchService,
+                    StandardWatchEventKinds.ENTRY_CREATE,
+                    StandardWatchEventKinds.ENTRY_DELETE);
+            WatchKey key;
+            while ((key = watchService.take()) != null) {
+                for (WatchEvent<?> event : key.pollEvents()) {
+                    LOGGER.info(event.kind().toString());
+                    LOGGER.info(event.context().toString());
+                    readyForTaking();
+                }
+                key.reset();
+            }
+        } catch (InterruptedException | IOException e) {
+            validate(true, "file.read.problem");
+            LOGGER.error(e.getMessage());
+        }
     }
 }
