@@ -26,10 +26,24 @@ public class FileService {
     @Value("${directory.path}")
     private String pathToDirectory;
 
-    public static boolean isEmptyDirectory(Path pathFolder) throws IOException {
+    /**
+     * Defined directory empty or not
+     *
+     * @param pathFolder path to directory
+     * @return is empty
+     * @throws IOException catch it in getFiles
+     */
+    private boolean isEmptyDirectory(Path pathFolder) throws IOException {
         return Files.newDirectoryStream(pathFolder).iterator().hasNext();
     }
 
+    /**
+     * Reade all paths to files
+     *
+     * @param path to directory
+     * @return list of paths
+     * @throws IOException catch it in getFiles
+     */
     private List<Path> readFiles(Path path) throws IOException {
         validate(path == null, "directory.is.Empty");
         try (Stream<Path> streamPaths = Files.list(path)) {
@@ -37,13 +51,18 @@ public class FileService {
         }
     }
 
+    /**
+     * Convert files in model FileTransferModel by support readFiles, path to directory take from pathToDirectory
+     *
+     * @return list of FileTransferModel
+     */
     public List<FileTransferModel> getFiles() {
         List<FileTransferModel> fileTransferModels = new ArrayList<>();
         validate(pathToDirectory == null, "not.correct.path");
         Path path = Paths.get(pathToDirectory);
         validate(!Files.exists(path), "file.not.found");
         try {
-            validate(!isEmptyDirectory(path), "directory.is.Empty");
+            validate(!isEmptyDirectory(path), "directory.is.empty");
             for (Path tempPath : readFiles(path)) {
                 FileTransferModel fileTransferModel = new FileTransferModel();
                 fileTransferModel.setName(tempPath.getFileName().toString());
@@ -52,6 +71,7 @@ public class FileService {
             }
             return fileTransferModels;
         } catch (IOException e) {
+            validate(true, "file.read.problem");
             LOGGER.error(e.getMessage());
         }
         return null;

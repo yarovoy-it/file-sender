@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Controller Sender. Include one get methods which return list of FileTransferDto
+ */
 @RestController
 @RequestMapping("/file")
 public class ControllerSender {
@@ -26,15 +29,12 @@ public class ControllerSender {
         this.mapper = mapper;
     }
 
-//    @RequestMapping(method = RequestMethod.GET)
-//    public ResponseEntity<FileTransferDto> getFiles() {
-//        List<FileTransferModel> files = fileService.getFiles();
-//        FileTransferDto fileDtoList = files.stream()
-//                .map((fileModel) -> mapper.map(fileModel, FileTransferDto.class))
-//                .collect(Collectors.toList()).get(0);
-//        return new ResponseEntity<>(fileDtoList, HttpStatus.OK);
-//    }
 
+    /**
+     * Mapping from FileTransferModel to FileTransferDto wrapped it to ResponseEntity then send to client
+     *
+     * @return dto object FileTransferDto wrapped to ResponseEntity
+     */
     @RequestMapping(method = RequestMethod.GET)
     public ResponseEntity<List<FileTransferDto>> getFiles() {
         List<FileTransferModel> files = fileService.getFiles();
