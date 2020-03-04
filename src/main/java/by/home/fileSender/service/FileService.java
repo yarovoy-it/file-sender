@@ -1,12 +1,19 @@
 package by.home.fileSender.service;
 
 
+import by.home.fileSender.dto.FileTransferDto;
 import by.home.fileSender.model.FileTransferModel;
+import org.dozer.Mapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.ArrayList;
@@ -15,7 +22,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static by.home.fileSender.component.Util.validate;
-import static by.home.fileSender.controller.ControllerSender.readyForTaking;
 
 @Service
 public class FileService {
@@ -25,15 +31,30 @@ public class FileService {
     @Value("${directory.path}")
     private String pathToDirectory;
 
+    @Value("${url.consumer}")
+    private String url;
+
+    private final Mapper mapper;
+
+    public FileService(Mapper mapper) {
+        this.mapper = mapper;
+    }
+
     /**
-     * Defined directory empty or not
+     * Delete all files
      *
-     * @param pathFolder path to directory
-     * @return is empty
-     * @throws IOException catch it in getFiles
+     * @param path to directory
+     * @throws IOException
      */
-    private boolean isEmptyDirectory(Path pathFolder) throws IOException {
-        return Files.newDirectoryStream(pathFolder).iterator().hasNext();
+    private void deleteFiles(Path path) throws IOException {
+        readFiles(path).forEach(file -> {
+            try {
+                Files.delete(file);
+            } catch (IOException e) {
+                validate(true, "file.not.delete");
+                LOGGER.error(e.getMessage());
+            }
+        });
     }
 
     /**
@@ -58,7 +79,7 @@ public class FileService {
     public List<FileTransferModel> getFiles() {
         List<FileTransferModel> fileTransferModels = new ArrayList<>();
         Path path = Paths.get(pathToDirectory);
-        validate(!Files.exists(path), "file.not.found");
+        validate(!Files.exists(path), "directory.not.found");
         try {
             for (Path tempPath : readFiles(path)) {
                 FileTransferModel fileTransferModel = new FileTransferModel();
@@ -74,6 +95,24 @@ public class FileService {
         return null;
     }
 
+    /**
+     * Read files from directory and send list of them to "file-consumer" by url
+     */
+    private void sendFiles() {
+        List<FileTransferModel> files = getFiles();
+        final List<FileTransferDto> fileDtoList = files.stream()
+                .map((fileModel) -> mapper.map(fileModel, FileTransferDto.class))
+                .collect(Collectors.toList());
+        RestTemplate restTemplate = new RestTemplate();
+        HttpEntity<List<FileTransferDto>> entity = new HttpEntity<>(fileDtoList);
+        restTemplate.exchange(url, HttpMethod.PUT, entity, new ParameterizedTypeReference<List<FileTransferDto>>() {
+        });
+    }
+
+    /**
+     * Observe folder, if file appeared: send him, delete and keep watching
+     */
+    @PostConstruct
     public void observeFolder() {
         try {
             WatchService watchService = FileSystems.getDefault().newWatchService();
@@ -88,7 +127,8 @@ public class FileService {
                 for (WatchEvent<?> event : key.pollEvents()) {
                     LOGGER.info(event.kind().toString());
                     LOGGER.info(event.context().toString());
-                    readyForTaking();
+                    sendFiles();
+                    deleteFiles(path);
                 }
                 key.reset();
             }
