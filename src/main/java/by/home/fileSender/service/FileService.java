@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -34,9 +35,15 @@ public class FileService {
     @Value("${url.consumer}")
     private String url;
 
+    @Value("${url.consumer.ping}")
+    private String urlPing;
+
+    private final RestTemplate restTemplate;
+
     private final Mapper mapper;
 
-    public FileService(Mapper mapper) {
+    public FileService(RestTemplate restTemplate, Mapper mapper) {
+        this.restTemplate = restTemplate;
         this.mapper = mapper;
     }
 
@@ -103,10 +110,27 @@ public class FileService {
         final List<FileTransferDto> fileDtoList = files.stream()
                 .map((fileModel) -> mapper.map(fileModel, FileTransferDto.class))
                 .collect(Collectors.toList());
-        RestTemplate restTemplate = new RestTemplate();
         HttpEntity<List<FileTransferDto>> entity = new HttpEntity<>(fileDtoList);
         restTemplate.exchange(url, HttpMethod.PUT, entity, new ParameterizedTypeReference<List<FileTransferDto>>() {
         });
+    }
+
+    /**
+     * Checking the consumer part it working or not
+     *
+     * @return true working false not available
+     */
+    private boolean pingConsumer() {
+        try {
+            ResponseEntity<String> str = restTemplate.getForEntity(urlPing, String.class);
+            if (str.getStatusCode().is2xxSuccessful()) {
+                return true;
+            }
+        } catch (Exception ex) {
+            LOGGER.warn(ex.getMessage());
+            return false;
+        }
+        return false;
     }
 
     /**
@@ -125,10 +149,12 @@ public class FileService {
             WatchKey key;
             while ((key = watchService.take()) != null) {
                 for (WatchEvent<?> event : key.pollEvents()) {
-                    LOGGER.info(event.kind().toString());
-                    LOGGER.info(event.context().toString());
-                    sendFiles();
-                    deleteFiles(path);
+                    if (pingConsumer()) {
+                        LOGGER.info(event.kind().toString());
+                        LOGGER.info(event.context().toString());
+                        sendFiles();
+                        deleteFiles(path);
+                    }
                 }
                 key.reset();
             }
