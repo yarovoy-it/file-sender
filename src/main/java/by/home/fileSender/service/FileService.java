@@ -16,6 +16,7 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,11 +51,11 @@ public class FileService {
     /**
      * Delete all files
      *
-     * @param path to directory
+     * @param paths list paths to directory
      * @throws IOException
      */
-    private void deleteFiles(Path path) throws IOException {
-        readFiles(path).forEach(file -> {
+    private void deleteFiles(List<Path> paths) {
+        paths.forEach(file -> {
             try {
                 Files.delete(file);
             } catch (IOException e) {
@@ -71,7 +72,7 @@ public class FileService {
      * @return list of paths
      * @throws IOException catch it in getFiles
      */
-    private List<Path> readFiles(Path path) throws IOException {
+    private List<Path> readPathToFiles(Path path) throws IOException {
         validate(path == null, "path.error");
         try (Stream<Path> streamPaths = Files.list(path)) {
             return streamPaths.collect(Collectors.toList());
@@ -83,15 +84,14 @@ public class FileService {
      *
      * @return list of FileTransferModel
      */
-    public List<FileTransferModel> getFiles() {
+    public List<FileTransferModel> getFiles(List<Path> paths) {
         List<FileTransferModel> fileTransferModels = new ArrayList<>();
-        Path path = Paths.get(pathToDirectory);
-        validate(!Files.exists(path), "directory.not.found");
         try {
-            for (Path tempPath : readFiles(path)) {
+            for (Path tempPath : paths) {
                 FileTransferModel fileTransferModel = new FileTransferModel();
                 fileTransferModel.setName(tempPath.getFileName().toString());
                 fileTransferModel.setBody(Files.readAllBytes(tempPath));
+                fileTransferModel.setSize(FileChannel.open(tempPath).size());
                 fileTransferModels.add(fileTransferModel);
             }
             return fileTransferModels;
@@ -105,14 +105,16 @@ public class FileService {
     /**
      * Read files from directory and send list of them to "file-consumer" by url
      */
-    private void sendFiles() {
-        List<FileTransferModel> files = getFiles();
-        final List<FileTransferDto> fileDtoList = files.stream()
+    private List<Path> sendFiles() throws IOException {
+        List<Path> listPaths = this.readPathToFiles(Paths.get(pathToDirectory));
+        List<FileTransferModel> files = getFiles(listPaths);
+        List<FileTransferDto> fileDtoList = files.stream()
                 .map((fileModel) -> mapper.map(fileModel, FileTransferDto.class))
                 .collect(Collectors.toList());
         HttpEntity<List<FileTransferDto>> entity = new HttpEntity<>(fileDtoList);
         restTemplate.exchange(url, HttpMethod.PUT, entity, new ParameterizedTypeReference<List<FileTransferDto>>() {
         });
+        return listPaths;
     }
 
     /**
@@ -142,6 +144,7 @@ public class FileService {
             WatchService watchService = FileSystems.getDefault().newWatchService();
             validate(pathToDirectory == null, "not.correct.path");
             Path path = Paths.get(pathToDirectory);
+            validate(!Files.isDirectory(path), "not.directory.path");
             path.register(
                     watchService,
                     StandardWatchEventKinds.ENTRY_CREATE,
@@ -152,8 +155,9 @@ public class FileService {
                     if (pingConsumer()) {
                         LOGGER.info(event.kind().toString());
                         LOGGER.info(event.context().toString());
-                        sendFiles();
-                        deleteFiles(path);
+                        deleteFiles(sendFiles());
+                    } else {
+                        key.reset();
                     }
                 }
                 key.reset();
