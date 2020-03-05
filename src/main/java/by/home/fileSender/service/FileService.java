@@ -19,10 +19,12 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static by.home.fileSender.component.Util.convertStringMbToByte;
 import static by.home.fileSender.component.Util.validate;
 
 @Service
@@ -38,6 +40,9 @@ public class FileService {
 
     @Value("${url.consumer.ping}")
     private String urlPing;
+
+    @Value("${file.size.value}")
+    private String allowableSizeMb;
 
     private final RestTemplate restTemplate;
 
@@ -107,10 +112,17 @@ public class FileService {
      */
     private List<Path> sendFiles() throws IOException {
         List<Path> listPaths = this.readPathToFiles(Paths.get(pathToDirectory));
-        List<FileTransferModel> files = getFiles(listPaths);
-        List<FileTransferDto> fileDtoList = files.stream()
-                .map((fileModel) -> mapper.map(fileModel, FileTransferDto.class))
-                .collect(Collectors.toList());
+        List<FileTransferDto> fileDtoList = new ArrayList<>();
+        for (FileTransferModel currentFile : getFiles(listPaths)) {
+            if (currentFile.getSize() > convertStringMbToByte(allowableSizeMb)) {
+                FileTransferDto fileDto = mapper.map(currentFile, FileTransferDto.class);
+                HttpEntity<List<FileTransferDto>> entity = new HttpEntity<>(Collections.singletonList(fileDto));
+                restTemplate.exchange(url, HttpMethod.PUT, entity, new ParameterizedTypeReference<List<FileTransferDto>>() {
+                });
+            } else {
+                fileDtoList.add(mapper.map(currentFile, FileTransferDto.class));
+            }
+        }
         HttpEntity<List<FileTransferDto>> entity = new HttpEntity<>(fileDtoList);
         restTemplate.exchange(url, HttpMethod.PUT, entity, new ParameterizedTypeReference<List<FileTransferDto>>() {
         });
@@ -147,8 +159,7 @@ public class FileService {
             validate(!Files.isDirectory(path), "not.directory.path");
             path.register(
                     watchService,
-                    StandardWatchEventKinds.ENTRY_CREATE,
-                    StandardWatchEventKinds.ENTRY_DELETE);
+                    StandardWatchEventKinds.ENTRY_CREATE);
             WatchKey key;
             while ((key = watchService.take()) != null) {
                 for (WatchEvent<?> event : key.pollEvents()) {

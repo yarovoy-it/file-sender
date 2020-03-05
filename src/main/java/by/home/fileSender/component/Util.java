@@ -17,4 +17,9 @@ public class Util {
             throw new RuntimeException(errorMessage);
         }
     }
+
+    public static long convertStringMbToByte(String mb) {
+        validate(mb == null, "file.size.value");
+        return Long.parseLong(mb) * 1000 * 1000;
+    }
 }
